@@ -14,6 +14,8 @@ import com.tencent.cos.xml.model.CosXmlResult;
 import com.tencent.cos.xml.transfer.COSXMLUploadTask;
 import com.tencent.cos.xml.transfer.TransferConfig;
 import com.tencent.cos.xml.transfer.TransferManager;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import java.util.HashMap;
 
@@ -43,27 +45,27 @@ public class TencentCosPlugin implements MethodCallHandler {
         channel.setMethodCallHandler(new TencentCosPlugin(registrar, channel));
     }
 
-    @Override
-    public void onMethodCall(MethodCall call, final Result result) {
+    public void _onMethodCall(MethodCall call, final Result result) {
         if (call.method.equals("TencentCos.uploadFile")) {
-            LocalSessionCredentialProvider localCredentialProvider = new LocalSessionCredentialProvider(call.<String>argument("secretId"),
-                    call.<String>argument("secretKey"), call.<String>argument("sessionToken"),
-                    Long.parseLong(call.argument("expiredTime").toString())
-            );
+            LocalSessionCredentialProvider localCredentialProvider = new LocalSessionCredentialProvider(
+                    call.<String>argument("secretId"), call.<String>argument("secretKey"),
+                    call.<String>argument("sessionToken"), Long.parseLong(call.argument("expiredTime").toString()));
             String region = call.argument("region");
             String appid = call.argument("appid");
             String bucket = call.argument("bucket");
             String cosPath = call.argument("cosPath");
             final String localPath = call.argument("localPath");
             TransferConfig transferConfig = new TransferConfig.Builder().build();
-            CosXmlServiceConfig.Builder builder = new CosXmlServiceConfig.Builder().setAppidAndRegion(appid, region).setDebuggable(false).isHttps(true);
-//创建 CosXmlServiceConfig 对象，根据需要修改默认的配置参数
+            CosXmlServiceConfig.Builder builder = new CosXmlServiceConfig.Builder().setAppidAndRegion(appid, region)
+                    .setDebuggable(true).isHttps(true);
+            // 创建 CosXmlServiceConfig 对象，根据需要修改默认的配置参数
             CosXmlServiceConfig serviceConfig = new CosXmlServiceConfig(builder);
-            CosXmlService cosXmlService = new CosXmlService(registrar.context(), serviceConfig, localCredentialProvider);
-            //初始化 TransferManager
+            CosXmlService cosXmlService = new CosXmlService(registrar.context(), serviceConfig,
+                    localCredentialProvider);
+            // 初始化 TransferManager
             TransferManager transferManager = new TransferManager(cosXmlService, transferConfig);
 
-//上传文件
+            // 上传文件
             COSXMLUploadTask cosxmlUploadTask = transferManager.upload(bucket, cosPath, localPath, null);
 
             final HashMap<String, Object> data = new HashMap<>();
@@ -72,10 +74,11 @@ public class TencentCosPlugin implements MethodCallHandler {
             cosxmlUploadTask.setCosXmlProgressListener(new CosXmlProgressListener() {
 
                 @Override
-                public void onProgress(long complete, long target) {
+                public void onProgress(final long complete, final long target) {
                     ((Activity) registrar.activeContext()).runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
+                            data.put("progress", (double)complete/(double)target * 100.0);
                             channel.invokeMethod("onProgress", data);
                         }
                     });
@@ -83,7 +86,7 @@ public class TencentCosPlugin implements MethodCallHandler {
                     Log.e("TencentCosPlugin", "onProgress =${progress * 100.0 / max}%");
                 }
             });
-            //设置返回结果回调
+            // 设置返回结果回调
             cosxmlUploadTask.setCosXmlResultListener(new CosXmlResultListener() {
                 @Override
                 public void onSuccess(CosXmlRequest request, CosXmlResult httPesult) {
@@ -92,18 +95,21 @@ public class TencentCosPlugin implements MethodCallHandler {
                         @Override
                         public void run() {
                             result.success(data);
+                            channel.invokeMethod("onSuccess", data);
                         }
                     });
                 }
 
                 @Override
-                public void onFail(CosXmlRequest request, CosXmlClientException exception, CosXmlServiceException serviceException) {
+                public void onFail(CosXmlRequest request, CosXmlClientException exception,
+                        CosXmlServiceException serviceException) {
                     Log.d("TencentCosPlugin", "Failed: " + (exception.toString() + serviceException.toString()));
                     data.put("message", (exception.toString() + serviceException.toString()));
                     ((Activity) registrar.activeContext()).runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
                             result.error("失败了", "失败了", "失败了");
+                            channel.invokeMethod("onFailed", data);
                         }
                     });
 
@@ -114,6 +120,15 @@ public class TencentCosPlugin implements MethodCallHandler {
         }
     }
 
+    @Override
+    public void onMethodCall(final MethodCall call, final Result result) {
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        executorService.execute(new Runnable(){
+            @Override
+            public void run(){
+                _onMethodCall(call,result);
+            }
+          });
+    }
+
 }
-
-
