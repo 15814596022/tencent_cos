@@ -64,7 +64,6 @@
         put.bucket = bucket;
         put.body =  url;/*文件的URL*/;
         [put setSendProcessBlock:^(int64_t bytesSent, int64_t totalBytesSent, int64_t totalBytesExpectedToSend) {
-
             NSLog(@"upload %lld totalSend %lld aim %lld", bytesSent, totalBytesSent, totalBytesExpectedToSend);
             NSMutableDictionary *data = [NSMutableDictionary dictionary];
             [data setValue:urlstr forKey:@"localPath" ];
@@ -81,11 +80,11 @@
             [data setValue:cosPath forKey:@"cosPath"];
             if(error.code == 0){
                 [self.channel invokeMethod:@"onSuccess" arguments:data];
-                result(@"onSuccess");
+                result(data);
             }else{
                 [data setValue: error.domain forKey:@"message"];
-                result(FlutterMethodNotImplemented);
                 [self.channel invokeMethod:@"onFailed" arguments:data];
+                result(data);
             }
 
         }];
