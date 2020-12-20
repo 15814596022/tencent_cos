@@ -41,7 +41,8 @@
         NSString *cosPath = self.arguments[@"cosPath"];
         NSString *bucket = self.arguments[@"bucket"];
 
-
+      static dispatch_once_t onceToken;
+      dispatch_once(&onceToken, ^{
         QCloudServiceConfiguration* configuration = [QCloudServiceConfiguration new];
         configuration.appID = appid;
 
@@ -53,6 +54,8 @@
         [QCloudCOSXMLService registerDefaultCOSXMLWithConfiguration:configuration];
         [QCloudCOSTransferMangerService registerDefaultCOSTransferMangerWithConfiguration:configuration];
 
+      });
+    
         //上传文件
         QCloudCOSXMLUploadObjectRequest* put = [QCloudCOSXMLUploadObjectRequest new];
 
